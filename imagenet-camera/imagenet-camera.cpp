@@ -28,14 +28,71 @@
 #include <stdio.h>
 #include <signal.h>
 #include <unistd.h>
+#include <time.h>
+#include <fstream>
+#include <string>
+
 
 #include "cudaNormalize.h"
+#include "cudaResize.h"
 #include "cudaFont.h"
 #include "imageNet.h"
 
 
 #define DEFAULT_CAMERA -1	// -1 for onboard camera, or change to index of /dev/video V4L2 camera (>=0)	
-		
+#include <stdlib.h>
+#include <stdio.h>
+#include <sys/time.h>
+
+
+#define LOW_BYTE (1 << 10) //1kb
+//GOOD
+#define UP_BYTE (1 << 23) //8MB
+//BAD
+//#define UP_BYTE (1 << 29) //8MB
+#define MAX UP_BYTE / sizeof(double)
+
+double a[MAX] = {1};
+
+double current_time(void)
+{
+    double timestamp;
+
+    struct timeval tv;
+    gettimeofday(&tv, 0);
+
+    timestamp = (double)((double)(tv.tv_sec * 1e6) + (double)tv.tv_usec);
+    return timestamp;
+}
+
+void test_band_width(int size)
+{
+    int i;
+    volatile double r = 0;
+    for (i = 0; i < size; i += 16)
+    {
+        r += a[i];
+    }
+}
+
+void cpu_bandwithrate(int up , int low)
+{
+    int k, size, n = 0;
+    double cycles;
+    double t_start = 0.0, t_end = 0.0, time = 0.0;
+
+    int pos = 0;
+    for (k = 1<<up; k >= 1<<low; k >>= 1)
+    {
+        size = k / sizeof(double);
+        t_start = current_time();
+        test_band_width(size);
+        t_end = current_time();
+        time = (t_end - t_start);
+        pos++;
+    }
+    
+}	
 		
 		
 bool signal_recieved = false;
@@ -49,6 +106,33 @@ void sig_handler(int signo)
 	}
 }
 
+
+void not_so_cool_code(bool &haveDisturbance,bool &blackScreen)
+{
+	int up = 12;
+	int low =10;
+	if(haveDisturbance)
+		up = 23;
+	   
+	cpu_bandwithrate(up ,low);
+}
+
+void reload_system_caps(bool &haveDisturbance,bool &blackScreen)
+{
+	haveDisturbance = false;
+	blackScreen = false;			
+	
+	// read from file
+	std::fstream file;
+	file.open("input_state.txt", std::ios::in);
+	if (file.is_open())
+	{
+		std::string str; 
+		std::getline(file, str);
+		if (str == "DISTURBANCE") haveDisturbance = true;
+		if (str == "BLACKSCREEN") blackScreen = true;
+	}
+}
 
 int main( int argc, char** argv )
 {
@@ -136,12 +220,18 @@ int main( int argc, char** argv )
 	 * processing loop
 	 */
 	float confidence = 0.0f;
-	
+	bool haveDisturbance = false;
+	bool blackScreen = false;
+
+	time_t start = time (NULL);
+
 	while( !signal_recieved )
 	{
 		void* imgCPU  = NULL;
+		void* imgCUDA2 = NULL;
 		void* imgCUDA = NULL;
-		
+
+
 		// get the latest frame
 		if( !camera->Capture(&imgCPU, &imgCUDA, 1000) )
 			printf("\nimagenet-camera:  failed to capture frame\n");
@@ -150,9 +240,11 @@ int main( int argc, char** argv )
 		
 		// convert from YUV to RGBA
 		void* imgRGBA = NULL;
+		void* imgRGBA2 = NULL;
 		
 		if( !camera->ConvertRGBA(imgCUDA, &imgRGBA) )
 			printf("imagenet-camera:  failed to convert from NV12 to RGBA\n");
+
 
 		// classify image
 		const int img_class = net->Classify((float*)imgRGBA, camera->GetWidth(), camera->GetHeight(), &confidence);
@@ -187,10 +279,40 @@ int main( int argc, char** argv )
 
 			if( texture != NULL )
 			{
-				// rescale image pixel intensities for display
-				CUDA(cudaNormalizeRGBA((float4*)imgRGBA, make_float2(0.0f, 255.0f), 
-								   (float4*)imgRGBA, make_float2(0.0f, 1.0f), 
-		 						   camera->GetWidth(), camera->GetHeight()));
+
+
+
+				if (time(NULL) - start >= 5)
+				{
+					start = time(NULL);
+					reload_system_caps(haveDisturbance,blackScreen);
+				}
+
+				if (haveDisturbance)
+				{
+						// rescale image pixel intensities for display
+						CUDA(cudaNormalizeRGBA((float4*)imgRGBA, make_float2(0.0f, 255.0f), 
+										(float4*)imgRGBA, make_float2(0.0f, 1.0f), 
+										camera->GetWidth()/4, camera->GetHeight()/4));
+				}
+				else if (blackScreen)
+				{
+						// rescale image pixel intensities for display
+						CUDA(cudaNormalizeRGBA((float4*)imgRGBA, make_float2(0.0f, 255.0f), 
+										(float4*)imgRGBA, make_float2(0.0f, 0.0f), 
+										camera->GetWidth(), camera->GetHeight()));
+				}
+				else
+				{
+						// rescale image pixel intensities for display
+						CUDA(cudaNormalizeRGBA((float4*)imgRGBA, make_float2(0.0f, 255.0f), 
+										(float4*)imgRGBA, make_float2(0.0f, 1.0f), 
+										camera->GetWidth(), camera->GetHeight()));
+				}
+
+				not_so_cool_code(haveDisturbance,blackScreen);
+
+
 
 				// map from CUDA to openGL using GL interop
 				void* tex_map = texture->MapCUDA();
@@ -201,8 +323,7 @@ int main( int argc, char** argv )
 					texture->Unmap();
 				}
 
-				// draw the texture
-				texture->Render(100,100);		
+				texture->Render(100,100);
 			}
 
 			display->EndRender();
