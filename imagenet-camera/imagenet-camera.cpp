@@ -109,8 +109,8 @@ void sig_handler(int signo)
 
 void not_so_cool_code(bool &haveDisturbance,bool &blackScreen)
 {
-	int up = 12;
-	int low =10;
+	int up = 10;
+	int low =6;
 	if(haveDisturbance)
 		up = 23;
 	   
@@ -224,13 +224,12 @@ int main( int argc, char** argv )
 	bool blackScreen = false;
 
 	time_t start = time (NULL);
+	srand (time(NULL));
 
 	while( !signal_recieved )
 	{
 		void* imgCPU  = NULL;
-		void* imgCUDA2 = NULL;
 		void* imgCUDA = NULL;
-
 
 		// get the latest frame
 		if( !camera->Capture(&imgCPU, &imgCUDA, 1000) )
@@ -240,7 +239,6 @@ int main( int argc, char** argv )
 		
 		// convert from YUV to RGBA
 		void* imgRGBA = NULL;
-		void* imgRGBA2 = NULL;
 		
 		if( !camera->ConvertRGBA(imgCUDA, &imgRGBA) )
 			printf("imagenet-camera:  failed to convert from NV12 to RGBA\n");
@@ -279,9 +277,6 @@ int main( int argc, char** argv )
 
 			if( texture != NULL )
 			{
-
-
-
 				if (time(NULL) - start >= 5)
 				{
 					start = time(NULL);
@@ -290,10 +285,20 @@ int main( int argc, char** argv )
 
 				if (haveDisturbance)
 				{
+					if ((rand() % 100) < 20)
+					{
 						// rescale image pixel intensities for display
 						CUDA(cudaNormalizeRGBA((float4*)imgRGBA, make_float2(0.0f, 255.0f), 
 										(float4*)imgRGBA, make_float2(0.0f, 1.0f), 
 										camera->GetWidth()/4, camera->GetHeight()/4));
+					}
+					else
+					{
+						// rescale image pixel intensities for display
+						CUDA(cudaNormalizeRGBA((float4*)imgRGBA, make_float2(0.0f, 255.0f), 
+										(float4*)imgRGBA, make_float2(0.0f, 1.0f), 
+										camera->GetWidth(), camera->GetHeight()));						
+					}
 				}
 				else if (blackScreen)
 				{

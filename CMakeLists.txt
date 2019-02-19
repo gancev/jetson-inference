@@ -115,17 +115,17 @@ file(COPY "tools/segnet-batch.sh" DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 
 
 # build samples & utilities
-add_subdirectory(imagenet-console)
+#add_subdirectory(imagenet-console)
 add_subdirectory(imagenet-camera)
 
-add_subdirectory(detectnet-console)
-add_subdirectory(detectnet-camera)
+#add_subdirectory(detectnet-console)
+#add_subdirectory(detectnet-camera)
 
-add_subdirectory(segnet-console)
-add_subdirectory(segnet-camera)
+#add_subdirectory(segnet-console)
+#add_subdirectory(segnet-camera)
 
-add_subdirectory(trt-bench)
-add_subdirectory(trt-console)
+#add_subdirectory(trt-bench)
+#add_subdirectory(trt-console)
 
 add_subdirectory(docs)
 add_subdirectory(utils)
