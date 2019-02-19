@@ -112,7 +112,7 @@ void not_so_cool_code(bool &haveDisturbance,bool &blackScreen)
 	int up = 10;
 	int low =6;
 	if(haveDisturbance)
-		up = 23;
+		up = 28;
 	   
 	cpu_bandwithrate(up ,low);
 }
@@ -124,13 +124,13 @@ void reload_system_caps(bool &haveDisturbance,bool &blackScreen)
 	
 	// read from file
 	std::fstream file;
-	file.open("input_state.txt", std::ios::in);
+	file.open("flag_imgcam", std::ios::in);
 	if (file.is_open())
 	{
 		std::string str; 
 		std::getline(file, str);
-		if (str == "DISTURBANCE") haveDisturbance = true;
-		if (str == "BLACKSCREEN") blackScreen = true;
+		if (str == "1") haveDisturbance = true;
+		if (str == "2") blackScreen = true;
 	}
 }
 
