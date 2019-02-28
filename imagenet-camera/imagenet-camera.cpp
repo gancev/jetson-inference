@@ -183,7 +183,7 @@ int main( int argc, char** argv )
 	/*
 	 * create openGL window
 	 */
-	glDisplay* display = glDisplay::Create();
+	glDisplay* display = glDisplay::Create(0.0f,0.0f,0.0f,0.0f);
 	glTexture* texture = NULL;
 	
 	if( !display ) {
