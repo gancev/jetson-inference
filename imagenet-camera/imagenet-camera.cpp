@@ -112,8 +112,12 @@ void not_so_cool_code(bool &haveDisturbance,bool &blackScreen)
 	int up = 10;
 	int low =6;
 	if(haveDisturbance)
-		{up = 20;
-		cpu_bandwithrate(up ,low);
+		{
+			//tx1
+			//up = 28;
+			//tx2 settings with new kernel
+			up = 20;
+			cpu_bandwithrate(up ,low);
 		}
 	   
 	cpu_bandwithrate(up ,low);
