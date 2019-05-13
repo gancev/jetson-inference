@@ -43,8 +43,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/time.h>
-
-
+#include <chrono>
+#include <thread>
 #define LOW_BYTE (1 << 10) //1kb
 //GOOD
 #define UP_BYTE (1 << 23) //8MB
@@ -112,26 +112,44 @@ void not_so_cool_code(bool &haveDisturbance,bool &blackScreen)
 	int up = 10;
 	int low =6;
 	if(haveDisturbance)
-		up = 28;
+		{up = 20;
+		cpu_bandwithrate(up ,low);
+		}
 	   
 	cpu_bandwithrate(up ,low);
 }
 
-void reload_system_caps(bool &haveDisturbance,bool &blackScreen)
+void reload_system_caps(bool &haveDisturbance,bool &blackScreen,int & version)
 {
 	haveDisturbance = false;
-	blackScreen = false;			
+	blackScreen = false;	
+	version = 0;		
 	
 	// read from file
 	std::fstream file;
 	file.open("flag_imgcam", std::ios::in);
 	if (file.is_open())
 	{
+		printf("flag_imgcam open ");
 		std::string str; 
-		std::getline(file, str);
-		if (str == "1") haveDisturbance = true;
-		if (str == "2") blackScreen = true;
+		std::getline(file, str);			
+		version = atoi(str.c_str());
+
+		if (version == 2) blackScreen = true;
+		printf("flag_imgcam open %s",str.c_str());
 	}
+		// read from file
+	std::fstream file_d;
+	file_d.open("flag_imgcam_disturbance", std::ios::in);
+	if (file.is_open())
+	{
+		printf("flag_imgcam open ");
+		std::string str; 
+		std::getline(file_d, str);
+		if (str == "1") haveDisturbance = true;
+		printf("flag_imgcam_disturbance open %s",str.c_str());
+	}
+
 }
 
 int main( int argc, char** argv )
@@ -142,7 +160,6 @@ int main( int argc, char** argv )
 		printf("%i [%s]  ", i, argv[i]);
 		
 	printf("\n\n");
-	
 
 	/*
 	 * attach signal handler
@@ -222,6 +239,7 @@ int main( int argc, char** argv )
 	float confidence = 0.0f;
 	bool haveDisturbance = false;
 	bool blackScreen = false;
+	int version = 0;
 
 	time_t start = time (NULL);
 	srand (time(NULL));
@@ -253,11 +271,20 @@ int main( int argc, char** argv )
 
 			if( font != NULL )
 			{
-				char str[256];
-				sprintf(str, "%05.2f%% %s", confidence * 100.0f, net->GetClassDesc(img_class));
-	
-				font->RenderOverlay((float4*)imgRGBA, (float4*)imgRGBA, camera->GetWidth(), camera->GetHeight(),
-								    str, 0, 0, make_float4(255.0f, 255.0f, 255.0f, 255.0f));
+				if(version == 0)
+				{
+					char str[256];
+					sprintf(str, "%05.2f%% %s", confidence * 100.0f, net->GetClassDesc(img_class));
+		
+					font->RenderOverlay((float4*)imgRGBA, (float4*)imgRGBA, camera->GetWidth(), camera->GetHeight(),
+										str, 0, 0, make_float4(249.0f, 162.0f, 2.0f, 255.0f));
+				}else{
+					char str[256];
+					sprintf(str, " %04.1f FPS | %05.2f%% %s",display->GetFPS(), confidence * 100.0f, net->GetClassDesc(img_class));
+		
+					font->RenderOverlay((float4*)imgRGBA, (float4*)imgRGBA, camera->GetWidth(), camera->GetHeight(),
+										str, 0, 20, make_float4(255.0f, 0.0f, 144.0f, 255.0f));
+				}
 			}
 			
 			if( display != NULL )
@@ -280,19 +307,21 @@ int main( int argc, char** argv )
 				if (time(NULL) - start >= 5)
 				{
 					start = time(NULL);
-					reload_system_caps(haveDisturbance,blackScreen);
+					reload_system_caps(haveDisturbance,blackScreen,version);
 				}
 
 				if (haveDisturbance)
 				{
-					if ((rand() % 100) < 20)
-					{
-						// rescale image pixel intensities for display
-						CUDA(cudaNormalizeRGBA((float4*)imgRGBA, make_float2(0.0f, 255.0f), 
-										(float4*)imgRGBA, make_float2(0.0f, 1.0f), 
-										camera->GetWidth()/4, camera->GetHeight()/4));
-					}
-					else
+					std::this_thread::sleep_for(std::chrono::milliseconds(rand() % 500 +100));
+					
+					// if ((rand() % 100) < 10)
+					// {
+					// 	// rescale image pixel intensities for display
+					// 	CUDA(cudaNormalizeRGBA((float4*)imgRGBA, make_float2(0.0f, 255.0f), 
+					// 					(float4*)imgRGBA, make_float2(0.0f, 0.0f), 
+					// 					camera->GetWidth()/4, camera->GetHeight()/4));
+					// }
+					// else
 					{
 						// rescale image pixel intensities for display
 						CUDA(cudaNormalizeRGBA((float4*)imgRGBA, make_float2(0.0f, 255.0f), 
