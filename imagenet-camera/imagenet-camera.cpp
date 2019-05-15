@@ -32,12 +32,12 @@
 #include <fstream>
 #include <string>
 
-
+#include "cudaMappedMemory.h"
 #include "cudaNormalize.h"
 #include "cudaResize.h"
 #include "cudaFont.h"
 #include "imageNet.h"
-
+#include "detectNet.h"
 
 #define DEFAULT_CAMERA -1	// -1 for onboard camera, or change to index of /dev/video V4L2 camera (>=0)	
 #include <stdlib.h>
@@ -139,7 +139,7 @@ void reload_system_caps(bool &haveDisturbance,bool &blackScreen,int & version)
 		std::getline(file, str);			
 		version = atoi(str.c_str());
 
-		if (version == 2) blackScreen = true;
+		if (version == 3) blackScreen = true;
 		printf("flag_imgcam open %s",str.c_str());
 	}
 		// read from file
@@ -193,7 +193,28 @@ int main( int argc, char** argv )
 	 * create imageNet
 	 */
 	imageNet* net = imageNet::Create(argc, argv);
+		/*
+	 * create detectNet
+	 */
+	detectNet* net_d = detectNet::Create(argc, argv);
+	/*
+	 * allocate memory for output bounding boxes and class confidence
+	 */
+	const uint32_t maxBoxes = net_d->GetMaxBoundingBoxes();
+	const uint32_t classes  = net_d->GetNumClasses();
 	
+	float* bbCPU    = NULL;
+	float* bbCUDA   = NULL;
+	float* confCPU  = NULL;
+	float* confCUDA = NULL;
+	
+	if( !cudaAllocMapped((void**)&bbCPU, (void**)&bbCUDA, maxBoxes * sizeof(float4)) ||
+	    !cudaAllocMapped((void**)&confCPU, (void**)&confCUDA, maxBoxes * classes * sizeof(float)) )
+	{
+		printf("detectnet-console:  failed to alloc output memory\n");
+		return 0;
+	}
+
 	if( !net )
 	{
 		printf("imagenet-console:   failed to initialize imageNet\n");
@@ -264,8 +285,45 @@ int main( int argc, char** argv )
 		
 		if( !camera->ConvertRGBA(imgCUDA, &imgRGBA) )
 			printf("imagenet-camera:  failed to convert from NV12 to RGBA\n");
+///////////////////////////////////////////////////////////////////////////////////////////////
+        if(version==2)
+		{
+		// classify image with detectNet
+			int numBoundingBoxes = maxBoxes;
+		
+			if( net_d->Detect((float*)imgRGBA, camera->GetWidth(), camera->GetHeight(), bbCPU, &numBoundingBoxes, confCPU))
+			{
+				printf("%i bounding boxes detected\n", numBoundingBoxes);
+			
+				int lastClass = 0;
+				int lastStart = 0;
+				
+				for( int n=0; n < numBoundingBoxes; n++ )
+				{
+					const int nc = confCPU[n*2+1];
+					float* bb = bbCPU + (n * 4);
+					
+					printf("detected obj %i  class #%u (%s)  confidence=%f\n", n, nc, net->GetClassDesc(nc), confCPU[n*2]);
+					//printf("bounding box %i  (%f, %f)  (%f, %f)  w=%f  h=%f\n", n, bb[0], bb[1], bb[2], bb[3], bb[2] - bb[0], bb[3] - bb[1]); 
+					char str[256];
+					sprintf(str, "%s\n",  net->GetClassDesc(nc));
+					font->RenderOverlay((float4*)imgRGBA, (float4*)imgRGBA, camera->GetWidth(), camera->GetHeight(),
+											str,  bb[0], bb[1], make_float4(255.0f, 204.0f, 1.0f, 255.0f));
+					if( nc != lastClass || n == (numBoundingBoxes - 1) )
+					{
+						if( !net_d->DrawBoxes((float*)imgRGBA, (float*)imgRGBA, camera->GetWidth(), camera->GetHeight(), 
+													bbCUDA + (lastStart * 4), (n - lastStart) + 1, lastClass) )
+							printf("detectnet-console:  failed to draw boxes\n");
+							
+						lastClass = nc;
+						lastStart = n;
 
-
+						CUDA(cudaDeviceSynchronize());
+					}
+				}
+			}
+		}
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// classify image
 		const int img_class = net->Classify((float*)imgRGBA, camera->GetWidth(), camera->GetHeight(), &confidence);
 	
@@ -275,19 +333,29 @@ int main( int argc, char** argv )
 
 			if( font != NULL )
 			{
-				if(version == 0)
+				if(version ==0)
 				{
 					char str[256];
 					sprintf(str, "%05.2f%% %s", confidence * 100.0f, net->GetClassDesc(img_class));
 		
 					font->RenderOverlay((float4*)imgRGBA, (float4*)imgRGBA, camera->GetWidth(), camera->GetHeight(),
-										str, 0, 0, make_float4(249.0f, 162.0f, 2.0f, 255.0f));
-				}else{
+										str, 0, 0, make_float4(0.0f, 75.0f, 1.0f, 255.0f));
+				}else if (version == 1){
 					char str[256];
-					sprintf(str, " %04.1f FPS | %05.2f%% %s",display->GetFPS(), confidence * 100.0f, net->GetClassDesc(img_class));
+					sprintf(str, "V%d %04.1f FPS | %05.2f%% %s",version,display->GetFPS(), confidence * 100.0f, net->GetClassDesc(img_class));
 		
 					font->RenderOverlay((float4*)imgRGBA, (float4*)imgRGBA, camera->GetWidth(), camera->GetHeight(),
 										str, 0, 20, make_float4(255.0f, 0.0f, 144.0f, 255.0f));
+				}else if(version == 3)
+				{
+					//this is black
+				}
+				else{
+					char str[256];
+					sprintf(str, "V%d %04.1f FPS | %05.2f%% %s",version,display->GetFPS(), confidence * 100.0f, net->GetClassDesc(img_class));
+		
+					font->RenderOverlay((float4*)imgRGBA, (float4*)imgRGBA, camera->GetWidth(), camera->GetHeight(),
+										str, 0, camera->GetHeight() -50, make_float4(255.0f, 204.0f, 0.0f, 255.0f));
 				}
 			}
 			
@@ -298,7 +366,7 @@ int main( int argc, char** argv )
 				display->SetTitle(str);	
 			}	
 		}	
-
+/////////////////////////////////////////////////////////////////////////////////////////////////////
 
 		// update display
 		if( display != NULL )
