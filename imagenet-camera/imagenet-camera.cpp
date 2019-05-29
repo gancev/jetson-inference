@@ -336,13 +336,13 @@ int main( int argc, char** argv )
 				if(version ==0)
 				{
 					char str[256];
-					sprintf(str, "%05.2f%% %s", confidence * 100.0f, net->GetClassDesc(img_class));
+					sprintf(str, "V%d %05.2f%% %s",version+1, confidence * 100.0f, net->GetClassDesc(img_class));
 		
 					font->RenderOverlay((float4*)imgRGBA, (float4*)imgRGBA, camera->GetWidth(), camera->GetHeight(),
 										str, 0, 0, make_float4(0.0f, 75.0f, 1.0f, 255.0f));
 				}else if (version == 1){
 					char str[256];
-					sprintf(str, "V%d %04.1f FPS | %05.2f%% %s",version,display->GetFPS(), confidence * 100.0f, net->GetClassDesc(img_class));
+					sprintf(str, "V%d %04.1f FPS | %05.2f%% %s",version+1,display->GetFPS(), confidence * 100.0f, net->GetClassDesc(img_class));
 		
 					font->RenderOverlay((float4*)imgRGBA, (float4*)imgRGBA, camera->GetWidth(), camera->GetHeight(),
 										str, 0, 20, make_float4(255.0f, 0.0f, 144.0f, 255.0f));
@@ -352,7 +352,7 @@ int main( int argc, char** argv )
 				}
 				else{
 					char str[256];
-					sprintf(str, "V%d %04.1f FPS | %05.2f%% %s",version,display->GetFPS(), confidence * 100.0f, net->GetClassDesc(img_class));
+					sprintf(str, "V%d %04.1f FPS | %05.2f%% %s",version+1,display->GetFPS(), confidence * 100.0f, net->GetClassDesc(img_class));
 		
 					font->RenderOverlay((float4*)imgRGBA, (float4*)imgRGBA, camera->GetWidth(), camera->GetHeight(),
 										str, 0, camera->GetHeight() -50, make_float4(255.0f, 204.0f, 0.0f, 255.0f));
